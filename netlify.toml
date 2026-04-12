@@ -1,0 +1,20 @@
+[build]
+  command = """
+    git clone https://github.com/flutter/flutter.git --depth 1 -b stable /opt/flutter && \
+    export PATH=$PATH:/opt/flutter/bin && \
+    flutter config --enable-web && \
+    flutter pub get && \
+    flutter build web --release --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
+  """
+  publish = "build/web"
+
+[build.environment]
+  NODE_VERSION = "18"
+  FLUTTER_VERSION = "stable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
