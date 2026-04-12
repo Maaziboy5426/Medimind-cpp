@@ -192,6 +192,12 @@ class _WellnessHeroSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final moodLabel = ref.watch(moodHistoryProvider).isNotEmpty
+        ? ref.watch(moodHistoryProvider).first.result.moodType.label
+        : 'Calm';
+    final physicalLabel = ref.watch(healthMetricsStreamProvider).value != null ? 'Stable' : 'Unknown';
+    final activityLabel = (ref.watch(todayActivityProvider).value?.steps ?? 0) > 5000 ? 'Active' : 'Low';
+
     return AppCard(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -204,62 +210,43 @@ class _WellnessHeroSection extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: 24),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Surrounding Indicators
-              AnimatedBuilder(
-                animation: animation,
-                builder: (context, child) {
-                  final score = ref.watch(dashboardWellnessScoreProvider).value ?? 78.0;
-                  return ProgressRing(
-                    progress: (score / 100.0) * animation.value,
-                    size: 200,
-                    strokeWidth: 14,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${(score * animation.value).round()}',
-                          style: const TextStyle(
-                            fontSize: 54,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.cyanAccent,
-                          ),
-                        ),
-                        StatusBadge(
-                          label: score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Care', 
-                          type: score >= 60 ? StatusType.success : StatusType.warning
-                        ),
-                      ],
+          AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              final score = ref.watch(dashboardWellnessScoreProvider).value ?? 78.0;
+              return ProgressRing(
+                progress: (score / 100.0) * animation.value,
+                size: 200,
+                strokeWidth: 14,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${(score * animation.value).round()}',
+                      style: const TextStyle(
+                        fontSize: 54,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.cyanAccent,
+                      ),
                     ),
-                  );
-                },
-              ),
-
-              _buildIndicator(
-                label: 'Mood',
-                value: ref.watch(moodHistoryProvider).isNotEmpty 
-                    ? ref.watch(moodHistoryProvider).first.result.moodType.label 
-                    : 'Calm',
-                icon: Icons.sentiment_satisfied_alt_rounded,
-                offset: const Offset(-130, -40),
-              ),
-              _buildIndicator(
-                label: 'Physical',
-                value: ref.watch(healthMetricsStreamProvider).value != null ? 'Stable' : 'Unknown',
-                icon: Icons.check_circle_outline_rounded,
-                offset: const Offset(130, -40),
-              ),
-              _buildIndicator(
-                label: 'Activity',
-                value: (ref.watch(todayActivityProvider).value?.steps ?? 0) > 5000 ? 'Active' : 'Low',
-                icon: Icons.bolt_rounded,
-                offset: const Offset(0, 130),
-              ),
+                    StatusBadge(
+                      label: score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Care',
+                      type: score >= 60 ? StatusType.success : StatusType.warning,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildIndicator(label: 'Mood', value: moodLabel, icon: Icons.sentiment_satisfied_alt_rounded),
+              _buildIndicator(label: 'Physical', value: physicalLabel, icon: Icons.check_circle_outline_rounded),
+              _buildIndicator(label: 'Activity', value: activityLabel, icon: Icons.bolt_rounded),
             ],
           ),
-          const SizedBox(height: 120),
         ],
       ),
     );
@@ -269,36 +256,32 @@ class _WellnessHeroSection extends ConsumerWidget {
     required String label,
     required String value,
     required IconData icon,
-    required Offset offset,
   }) {
-    return Transform.translate(
-      offset: offset,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.cyanAccent.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 20, color: AppTheme.cyanAccent),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.cyanAccent.withOpacity(0.1),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12, color: AppTheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+          child: Icon(icon, size: 20, color: AppTheme.cyanAccent),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: AppTheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.onSurface,
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.onSurface,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

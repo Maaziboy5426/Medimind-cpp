@@ -112,25 +112,26 @@ final dashboardWellnessScoreProvider = FutureProvider<double>((ref) async {
   final activityAsync = ref.watch(todayActivityProvider);
   final hydrationAsync = ref.watch(todayHydrationProvider);
   final sleepAsync = ref.watch(sleepHistoryProvider);
-  
-  final aiService = ref.read(aiEngineServiceProvider);
-  
+
   final activity = activityAsync.value;
   final hydration = hydrationAsync.value ?? 1500;
   final sleepHistory = sleepAsync.value;
-  final sleepHrs = sleepHistory != null && sleepHistory.isNotEmpty ? sleepHistory.first.sleepDuration : 7.2;
+  final sleepHrs = sleepHistory != null && sleepHistory.isNotEmpty
+      ? sleepHistory.first.sleepDuration
+      : 7.2;
 
-  if (activity == null && metric == null) return 78.0; 
-  
-  final score = await aiService.getWellnessScore(
-    sleepHours: sleepHrs, 
-    moodLabel: 'Calm', 
-    activitySteps: activity?.steps ?? 4000,
-    hydrationMl: hydration, 
-    heartRate: metric?.heartRate ?? 72,
-  );
-  
-  return score ?? 78.0;
+  // Compute score locally — no backend required.
+  // Each component contributes up to 25 points (total = 100).
+  final sleepScore = (sleepHrs.clamp(0, 9) / 9.0) * 25;
+  final stepScore = ((activity?.steps ?? 4000).clamp(0, 10000) / 10000.0) * 25;
+  final hydrationScore = (hydration.clamp(0, 2500) / 2500.0) * 25;
+  final hrRaw = metric?.heartRate ?? 72;
+  // Heart-rate score: ideal = 60-80 bpm, penalise outliers
+  final hrScore = (hrRaw >= 60 && hrRaw <= 80)
+      ? 25.0
+      : (hrRaw >= 50 && hrRaw <= 100 ? 15.0 : 5.0);
+
+  return (sleepScore + stepScore + hydrationScore + hrScore).clamp(0, 100);
 });
 
 // --- Mood & AI Services ---

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../services/mental_health_service.dart';
 import '../../../../services/mental_health_engine.dart';
 import '../../../../services/speech_service.dart';
+import '../../../../services/gemini_health_service.dart';
+import '../../../../services/storage_provider.dart';
 import '../../../../models/mental_health_models.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
@@ -54,53 +56,54 @@ class _MentalHealthScreenState extends ConsumerState<MentalHealthScreen>
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     setState(() => _isAnalyzing = true);
-    
-    // Perform keyword analysis locally
-    final sentimentScore = MentalHealthEngine.analyzeSentiment(text);
-    
-    String moodLabel = 'Neutral';
-    if (sentimentScore > 2) moodLabel = 'Happy';
-    else if (sentimentScore > 0) moodLabel = 'Calm';
-    else if (sentimentScore < -2) moodLabel = 'Depressed';
-    else if (sentimentScore < -1) moodLabel = 'Stressed';
-    else if (text.toLowerCase().contains('anxious')) moodLabel = 'Anxious';
+
+    // Call Gemini — falls back to local engine automatically
+    final gemini = ref.read(geminiHealthServiceProvider);
+    final result = await gemini.analyzeMood(text);
 
     final moodLog = MoodLog(
       date: DateTime.now(),
-      moodLabel: moodLabel,
-      confidence: 85,
+      moodLabel: result.moodLabel,
+      confidence: result.confidence,
       textEntry: text,
       voiceEntry: '',
-      stressScore: moodLabel == 'Stressed' || moodLabel == 'Anxious' ? 75 : (moodLabel == 'Depressed' ? 60 : (moodLabel == 'Happy' ? 20 : 40)),
+      stressScore: result.stressScore,
     );
-    
+
     await ref.read(mentalHealthServiceProvider).saveMoodLog(moodLog);
-    
-    // Also save a stress record automatically
+
     final stressRecord = StressRecord(
       date: DateTime.now(),
-      sleepHours: 7.0, // Default for now
+      sleepHours: 7.0,
       activityLevel: 5,
       hydrationLevel: 5,
-      stressScore: moodLog.stressScore,
+      stressScore: result.stressScore,
     );
     await ref.read(mentalHealthServiceProvider).saveStressRecord(stressRecord);
 
     ref.invalidate(moodLogsProvider);
     ref.invalidate(mentalWellnessScoreProvider);
     ref.invalidate(streakProvider);
-    
+
     _textController.clear();
     if (mounted) {
       setState(() => _isAnalyzing = false);
+      final badge = result.fromAI ? '✨ AI' : '📱 Local';
+      final msg = result.insight.isNotEmpty
+          ? '$badge · ${result.moodLabel}: ${result.insight}'
+          : '$badge · Mood: ${result.moodLabel} (Stress: ${result.stressScore}/100)';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Status: $moodLabel'),
-          backgroundColor: AppTheme.cyanAccent.withOpacity(0.8),
+          content: Text(msg),
+          backgroundColor: AppTheme.cyanAccent.withOpacity(0.9),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 4),
         ),
       );
     }
   }
+
 
 
   @override
@@ -144,45 +147,59 @@ class _MentalHealthScreenState extends ConsumerState<MentalHealthScreen>
             ),
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              sliver: isDesktop
-                  ? SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 16,
-                        mainAxisExtent: 340,
-                      ),
-                      delegate: SliverChildListDelegate([
-                        _MoodInputCard(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          isAnalyzing: _isAnalyzing,
-                          onAnalyze: _submit,
-                          lastLog: lastMood,
-                        ),
-                        _MoodTrendGraph(logs: moodLogs),
-                        _StressAnxietyCard(logs: moodLogs),
-                        _AIMentalInsightsCard(logs: moodLogs),
-                      ]),
-                    )
-                  : SliverList(
-                      delegate: SliverChildListDelegate([
-                        _MoodInputCard(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          isAnalyzing: _isAnalyzing,
-                          onAnalyze: _submit,
-                          lastLog: lastMood,
-                        ),
-                        const SizedBox(height: 16),
-                        _MoodTrendGraph(logs: moodLogs),
-                        const SizedBox(height: 16),
-                        _StressAnxietyCard(logs: moodLogs),
-                        const SizedBox(height: 16),
-                        _AIMentalInsightsCard(logs: moodLogs),
-                        const SizedBox(height: 16),
-                      ]),
-                    ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(
+                  isDesktop
+                      ? [
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _MoodInputCard(
+                                    controller: _textController,
+                                    focusNode: _focusNode,
+                                    isAnalyzing: _isAnalyzing,
+                                    onAnalyze: _submit,
+                                    lastLog: lastMood,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(child: _MoodTrendGraph(logs: moodLogs)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: _StressAnxietyCard(logs: moodLogs)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _AIMentalInsightsCard(logs: moodLogs)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ]
+                      : [
+                          _MoodInputCard(
+                            controller: _textController,
+                            focusNode: _focusNode,
+                            isAnalyzing: _isAnalyzing,
+                            onAnalyze: _submit,
+                            lastLog: lastMood,
+                          ),
+                          const SizedBox(height: 16),
+                          _MoodTrendGraph(logs: moodLogs),
+                          const SizedBox(height: 16),
+                          _StressAnxietyCard(logs: moodLogs),
+                          const SizedBox(height: 16),
+                          _AIMentalInsightsCard(logs: moodLogs),
+                          const SizedBox(height: 16),
+                        ],
+                ),
+              ),
             ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
@@ -218,6 +235,14 @@ class _WellnessScoreHero extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final moodLabel = lastMood?.moodLabel ?? 'Neutral';
+    final stressLabel = lastMood == null
+        ? 'Unknown'
+        : (lastMood!.stressScore > 70 ? 'High' : (lastMood!.stressScore > 40 ? 'Medium' : 'Low'));
+    final anxietyLabel = lastMood == null
+        ? 'Unknown'
+        : (lastMood!.stressScore > 60 ? 'Moderate' : 'Mild');
+
     return AppCard(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -230,95 +255,65 @@ class _WellnessScoreHero extends ConsumerWidget {
               color: AppTheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 32),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: animation,
-                builder: (context, child) {
-                  final score = scoreAsync.value ?? 75.0;
-                  return ProgressRing(
-                    progress: (score / 100.0) * animation.value,
-                    size: 200,
-                    strokeWidth: 14,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${(score * animation.value).round()}',
-                          style: const TextStyle(
-                            fontSize: 56,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.cyanAccent,
-                          ),
-                        ),
-                        StatusBadge(
-                          label: score >= 80 ? 'Excellent' : (score >= 60 ? 'Stable' : 'Needs Care'),
-                          type: score >= 80 ? StatusType.success : (score >= 60 ? StatusType.info : StatusType.error),
-                        ),
-                      ],
+          const SizedBox(height: 24),
+          AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              final score = scoreAsync.value ?? 75.0;
+              return ProgressRing(
+                progress: (score / 100.0) * animation.value,
+                size: 200,
+                strokeWidth: 14,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${(score * animation.value).round()}',
+                      style: const TextStyle(
+                        fontSize: 56,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.cyanAccent,
+                      ),
                     ),
-                  );
-                },
-              ),
-              _Indicator(
-                  alignment: Alignment.topLeft,
-                  label: 'Mood',
-                  value: lastMood?.moodLabel ?? 'Neutral',
-                  icon: Icons.sentiment_satisfied_rounded,
-                  offset: const Offset(-10, -20)),
-              _Indicator(
-                  alignment: Alignment.topRight,
-                  label: 'Stress',
-                  value: lastMood == null ? 'Unknown' : (lastMood!.stressScore > 70 ? 'High' : (lastMood!.stressScore > 40 ? 'Medium' : 'Low')),
-                  icon: Icons.bolt_rounded,
-                  offset: const Offset(10, -20)),
-              _Indicator(
-                  alignment: Alignment.bottomCenter,
-                  label: 'Anxiety',
-                  value: lastMood == null ? 'Unknown' : (lastMood!.stressScore > 60 ? 'Moderate' : 'Mild'),
-                  icon: Icons.waves_rounded,
-                  offset: const Offset(0, 70)),
+                    StatusBadge(
+                      label: score >= 80 ? 'Excellent' : (score >= 60 ? 'Stable' : 'Needs Care'),
+                      type: score >= 80 ? StatusType.success : (score >= 60 ? StatusType.info : StatusType.error),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildIndicatorItem(Icons.sentiment_satisfied_rounded, 'Mood', moodLabel),
+              _buildIndicatorItem(Icons.bolt_rounded, 'Stress', stressLabel),
+              _buildIndicatorItem(Icons.waves_rounded, 'Anxiety', anxietyLabel),
             ],
           ),
-          const SizedBox(height: 40),
         ],
       ),
     );
   }
-}
 
-class _Indicator extends ConsumerWidget {
-  _Indicator({
-    required this.alignment,
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.offset = Offset.zero,
-  });
-  final Alignment alignment;
-  final String label;
-  final String value;
-  final IconData icon;
-  final Offset offset;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Align(
-      alignment: alignment,
-      child: Transform.translate(
-        offset: offset,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: AppTheme.cyanAccent),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.onSurfaceVariant)),
-            Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.onSurface)),
-          ],
+  Widget _buildIndicatorItem(IconData icon, String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.cyanAccent.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 20, color: AppTheme.cyanAccent),
         ),
-      ),
+        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.onSurfaceVariant)),
+        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.onSurface)),
+      ],
     );
   }
 }
@@ -343,32 +338,119 @@ class _MoodInputCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ──
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              const Icon(Icons.psychology_alt_rounded, color: AppTheme.cyanAccent, size: 22),
+              const SizedBox(width: 8),
               const Text('Mood Analysis', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Spacer(),
               if (lastLog != null)
-                Text(_getEmoji(lastLog!.moodLabel), style: const TextStyle(fontSize: 24)),
+                Text(_getEmoji(lastLog!.moodLabel), style: const TextStyle(fontSize: 26)),
             ],
           ),
-          const SizedBox(height: 12),
+
+          // ── Last result chip ──
           if (lastLog != null) ...[
-            Text('Mood: ${lastLog!.moodLabel}', style: const TextStyle(color: AppTheme.cyanAccent, fontWeight: FontWeight.bold)),
-            Text('Logged: ${DateFormat('HH:mm').format(lastLog!.date)}', style: const TextStyle(fontSize: 12, color: AppTheme.onSurfaceVariant)),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.cyanAccent.withOpacity(0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.cyanAccent.withOpacity(0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Last result ', style: TextStyle(fontSize: 12, color: AppTheme.onSurfaceVariant)),
+                      Text(
+                        '· ${DateFormat('hh:mm a').format(lastLog!.date)}',
+                        style: const TextStyle(fontSize: 12, color: AppTheme.onSurfaceVariant),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${lastLog!.confidence}% confidence',
+                        style: const TextStyle(fontSize: 11, color: AppTheme.cyanAccent, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_getEmoji(lastLog!.moodLabel)}  ${lastLog!.moodLabel}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.onSurface),
+                  ),
+                  const SizedBox(height: 10),
+                  // Stress bar
+                  Row(
+                    children: [
+                      const Text('Stress  ', style: TextStyle(fontSize: 11, color: AppTheme.onSurfaceVariant)),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: lastLog!.stressScore / 100.0,
+                            minHeight: 6,
+                            backgroundColor: AppTheme.outline.withOpacity(0.4),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              lastLog!.stressScore > 70
+                                  ? AppTheme.error
+                                  : lastLog!.stressScore > 40
+                                      ? AppTheme.warning
+                                      : AppTheme.success,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${lastLog!.stressScore}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.onSurface),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
+
+          const SizedBox(height: 14),
+          // ── Input ──
           TextField(
             controller: controller,
             focusNode: focusNode,
             maxLines: 3,
+            style: const TextStyle(color: AppTheme.onSurface, fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'How are you feeling today?',
+              hintText: 'Describe how you feel… (e.g. I feel anxious and overwhelmed today)',
+              hintStyle: const TextStyle(fontSize: 13, color: AppTheme.onSurfaceVariant),
               fillColor: AppTheme.navy600.withOpacity(0.3),
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.outline),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.outline),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.cyanAccent),
+              ),
+              contentPadding: const EdgeInsets.all(14),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Text(
+            'Tip: Be descriptive — the more detail you share, the more accurate the analysis.',
+            style: TextStyle(fontSize: 11, color: AppTheme.onSurfaceVariant.withOpacity(0.75)),
+          ),
+          const SizedBox(height: 14),
           PrimaryButton(
-            label: 'Analyze Mood',
+            label: 'Analyze My Mood',
             onPressed: isAnalyzing ? null : onAnalyze,
             isLoading: isAnalyzing,
           ),
@@ -379,12 +461,17 @@ class _MoodInputCard extends ConsumerWidget {
 
   String _getEmoji(String label) {
     switch (label.toLowerCase()) {
-      case 'happy': return '😊';
-      case 'calm': return '😌';
-      case 'neutral': return '😐';
-      case 'stressed': return '😤';
-      case 'depressed': return '😢';
-      default: return '😐';
+      case 'happy':       return '😊';
+      case 'grateful':    return '🙏';
+      case 'energetic':   return '⚡';
+      case 'calm':        return '😌';
+      case 'neutral':     return '😐';
+      case 'anxious':     return '😰';
+      case 'sad':         return '😢';
+      case 'angry':       return '😠';
+      case 'overwhelmed': return '😤';
+      case 'depressed':   return '💔';
+      default:            return '😐';
     }
   }
 }
@@ -477,14 +564,7 @@ class _MoodTrendGraph extends ConsumerWidget {
     final recentLogs = logs.reversed.toList();
     final spots = List.generate(recentLogs.length, (index) {
       final log = recentLogs[index];
-      double score = 3;
-      switch (log.moodLabel.toLowerCase()) {
-        case 'happy': score = 5; break;
-        case 'calm': score = 4; break;
-        case 'neutral': score = 3; break;
-        case 'stressed': score = 2; break;
-        case 'depressed': score = 1; break;
-      }
+      final score = MentalHealthEngine.moodToScore(log.moodLabel).toDouble();
       return FlSpot(index.toDouble(), score);
     });
 
@@ -493,47 +573,55 @@ class _MoodTrendGraph extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Mood Trend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 24),
-          if (spots.isEmpty)
-             const Expanded(child: Center(child: Text('No data yet', style: TextStyle(color: AppTheme.onSurfaceVariant))))
-          else
-            Expanded(
-              child: LineChart(
-                LineChartData(
-                  gridData: const FlGridData(show: false),
-                  titlesData: FlTitlesData(
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 30,
-                        getTitlesWidget: (v, _) {
-                          if (v >= 0 && v < recentLogs.length) {
-                             return Text(DateFormat('E').format(recentLogs[v.toInt()].date).toLowerCase(), style: const TextStyle(fontSize: 10, color: AppTheme.onSurfaceVariant));
-                          }
-                          return const Text('');
-                        },
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200,
+            child: spots.isEmpty
+                ? const Center(
+                    child: Text('No data yet', style: TextStyle(color: AppTheme.onSurfaceVariant)),
+                  )
+                : LineChart(
+                    LineChartData(
+                      gridData: const FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 28,
+                            getTitlesWidget: (v, _) {
+                              if (v >= 0 && v < recentLogs.length) {
+                                return Text(
+                                  DateFormat('E').format(recentLogs[v.toInt()].date).toLowerCase(),
+                                  style: const TextStyle(fontSize: 10, color: AppTheme.onSurfaceVariant),
+                                );
+                              }
+                              return const Text('');
+                            },
+                          ),
+                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                       ),
+                      borderData: FlBorderData(show: false),
+                      minY: 0,
+                      maxY: 8,
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          color: AppTheme.cyanAccent,
+                          barWidth: 3,
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: AppTheme.cyanAccent.withOpacity(0.1),
+                          ),
+                          dotData: const FlDotData(show: true),
+                        ),
+                      ],
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  borderData: FlBorderData(show: false),
-                  minY: 0,
-                  maxY: 6,
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
-                      color: AppTheme.cyanAccent,
-                      barWidth: 3,
-                      belowBarData: BarAreaData(show: true, color: AppTheme.cyanAccent.withOpacity(0.1)),
-                      dotData: const FlDotData(show: true),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          ),
         ],
       ),
     );

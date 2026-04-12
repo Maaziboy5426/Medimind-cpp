@@ -6,10 +6,104 @@ import '../core/config/gemini_config.dart';
 import '../models/chat_models.dart';
 import 'activity_tracker_service.dart';
 import 'mental_health_service.dart';
+import 'mental_health_engine.dart';
+
+/// Result returned by [GeminiService.analyzeMood].
+class GeminiMoodResult {
+  final String moodLabel;
+  final int stressScore;
+  final int confidence;
+  final String insight;
+  final bool fromAI; // true = Gemini responded, false = local fallback
+
+  const GeminiMoodResult({
+    required this.moodLabel,
+    required this.stressScore,
+    required this.confidence,
+    required this.insight,
+    required this.fromAI,
+  });
+}
 
 class GeminiService {
   final String _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+
+  /// Analyses [text] using Gemini and returns a structured [GeminiMoodResult].
+  /// Falls back to the local keyword engine if the API is unavailable.
+  Future<GeminiMoodResult> analyzeMood(String text) async {
+    const prompt = '''
+You are a clinical-grade mood analysis AI. Analyse the user's journal entry below and respond ONLY with valid JSON — no markdown, no extra text.
+
+Required JSON format:
+{
+  "mood": "<one of: Happy | Grateful | Energetic | Calm | Neutral | Anxious | Sad | Angry | Overwhelmed | Depressed>",
+  "stress_score": <integer 0-100>,
+  "confidence": <integer 60-98>,
+  "insight": "<one actionable sentence tailored to the detected mood>"
+}
+
+Rules:
+- mood must be exactly one of the 10 labels listed.
+- stress_score reflects emotional distress (0 = none, 100 = severe).
+- confidence reflects how certain you are (be honest — use lower values for ambiguous text).
+- insight must be empathetic, specific, and under 120 characters.
+''';
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl?key=$geminiApiKey'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'contents': [
+            {
+              'role': 'user',
+              'parts': [{'text': '$prompt\n\nUser entry: "$text"'}],
+            }
+          ],
+          'generationConfig': {
+            'maxOutputTokens': 200,
+            'temperature': 0.3,
+            'responseMimeType': 'application/json',
+          },
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final raw = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        if (raw != null) {
+          final json = jsonDecode(raw.toString().trim()) as Map<String, dynamic>;
+          final mood = json['mood']?.toString() ?? 'Neutral';
+          final stress = (json['stress_score'] as num?)?.toInt() ?? 50;
+          final conf = (json['confidence'] as num?)?.toInt() ?? 75;
+          final insight = json['insight']?.toString() ?? '';
+          return GeminiMoodResult(
+            moodLabel: mood,
+            stressScore: stress.clamp(0, 100),
+            confidence: conf.clamp(60, 98),
+            insight: insight,
+            fromAI: true,
+          );
+        }
+      }
+    } catch (_) {
+      // Fall through to local engine
+    }
+
+    // ── Local fallback ────────────────────────────────────────────────────────
+    final sentiment = MentalHealthEngine.analyzeSentiment(text);
+    final mood = MentalHealthEngine.classifyMood(text, sentiment);
+    final stress = MentalHealthEngine.stressFromMood(mood, sentiment);
+    final confidence = (60 + sentiment.abs() * 4).clamp(60, 98);
+    return GeminiMoodResult(
+      moodLabel: mood,
+      stressScore: stress,
+      confidence: confidence,
+      insight: '',
+      fromAI: false,
+    );
+  }
 
   Future<String> sendMessage(String userText, List<ChatMessage> history) async {
     final context = await _getHealthContext();
