@@ -48,6 +48,23 @@ class ProfileService {
 
   Future<void> updateProfile(UserProfile profile) async {
     await _box.put(_currentUserId, profile.toMap());
+    
+    // Sync local changes back to the backend AppUser
+    final dbUser = _firebase.getCurrentUser();
+    if (dbUser != null) {
+      final updatedDbUser = dbUser.copyWith(
+        name: profile.name,
+        age: profile.age,
+        gender: profile.gender,
+        height: profile.height,
+        weight: profile.weight,
+        activityLevel: profile.activityLevel,
+        sleepAverage: profile.sleepAverage,
+        smokingStatus: profile.smokingStatus,
+        alcoholConsumption: profile.alcoholConsumption,
+      );
+      await _firebase.updateProfile(updatedDbUser);
+    }
   }
 
   Stream<UserProfile?> watchProfile() async* {
@@ -95,15 +112,17 @@ class ProfileService {
     await saveProfile(defaultProfile);
   }
 
-  /// Keeps name & email in sync with whatever was stored at signup.
-  Future<void> syncNameAndEmailFromAuth() async {
+  Future<void> syncWithAppUser() async {
     final profile = getProfile();
     if (profile == null) return;
+    
     final dbUser = _firebase.getCurrentUser();
+    if (dbUser == null) return;
+
     final storedEmail = _auth.getStoredUserEmail() ?? '';
-    final freshEmail = dbUser?.email.isNotEmpty == true ? dbUser!.email : storedEmail;
-    final freshName  = dbUser?.name.isNotEmpty == true
-        ? dbUser!.name
+    final freshEmail = dbUser.email.isNotEmpty == true ? dbUser.email : storedEmail;
+    final freshName  = dbUser.name.isNotEmpty == true
+        ? dbUser.name
         : storedEmail
             .split('@')
             .first
@@ -112,9 +131,20 @@ class ProfileService {
             .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
             .where((w) => w.isNotEmpty)
             .join(' ');
-    // Only write if something changed to avoid unnecessary Hive writes
-    if (profile.name != freshName || profile.email != freshEmail) {
-      await updateProfile(profile.copyWith(name: freshName, email: freshEmail));
-    }
+
+    final updatedProfile = profile.copyWith(
+      name: freshName,
+      email: freshEmail,
+      age: dbUser.age,
+      gender: dbUser.gender,
+      height: dbUser.height,
+      weight: dbUser.weight,
+      activityLevel: dbUser.activityLevel,
+      sleepAverage: dbUser.sleepAverage,
+      smokingStatus: dbUser.smokingStatus,
+      alcoholConsumption: dbUser.alcoholConsumption,
+    );
+
+    await _box.put(_currentUserId, updatedProfile.toMap());
   }
 }

@@ -34,7 +34,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final svc = ref.read(profileServiceProvider);
       await svc.createDefaultProfileIfNeeded();
-      await svc.syncNameAndEmailFromAuth();
+      await svc.syncWithAppUser();
     });
   }
 
