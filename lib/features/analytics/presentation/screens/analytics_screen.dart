@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:medmind/core/theme/app_theme.dart';
 import 'package:medmind/services/analytics_provider.dart';
 import 'package:medmind/models/analytics_models.dart';
@@ -93,7 +99,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
                               const SizedBox(height: 24),
                               _buildAiHealthInsights(summary),
                               const SizedBox(height: 24),
-                              _buildExportReport(),
+                              _buildExportReport(summary, range),
                             ],
                           ),
                         ),
@@ -153,7 +159,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
       const SizedBox(height: 24),
       _buildAiHealthInsights(summary),
       const SizedBox(height: 24),
-      _buildExportReport(),
+      _buildExportReport(summary, range),
     ];
   }
 
@@ -647,7 +653,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
     );
   }
 
-  Widget _buildExportReport() {
+  Widget _buildExportReport(AnalyticsSummary summary, int range) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -658,11 +664,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Health report PDF exported successfully!'), backgroundColor: Colors.green),
-                  );
-                },
+                onPressed: () => _exportPdf(summary, range),
                 icon: const Icon(Icons.picture_as_pdf, size: 18),
                 label: const Text("Download as PDF", style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
@@ -675,13 +677,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Health report CSV exported successfully!'), backgroundColor: Colors.green),
-                  );
-                },
+                onPressed: () => _exportCsv(summary, range),
                 icon: const Icon(Icons.table_chart, size: 18),
-                label: const Text("Download as CSV", style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text("Share as CSV", style: TextStyle(fontWeight: FontWeight.bold)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.cyanAccent,
                   side: BorderSide(color: AppTheme.cyanAccent.withOpacity(0.5)),
@@ -694,5 +692,104 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> with SingleTi
         ),
       ],
     );
+  }
+
+  Future<void> _exportPdf(AnalyticsSummary summary, int range) async {
+    try {
+      final doc = pw.Document();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('MediMind Health Report', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                pw.SizedBox(height: 10),
+                pw.Text('Date Generated: ${DateTime.now().toIso8601String().split('T').first}'),
+                pw.Text('Report Range: Last $range days'),
+                pw.SizedBox(height: 20),
+                
+                pw.Text('Summary Statistics', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                pw.Text('Total Steps: ${summary.totalSteps}'),
+                pw.Text('Average Sleep: ${summary.avgSleep.toStringAsFixed(1)} hours'),
+                pw.Text('Calories Burned: ${summary.caloriesBurned} kcal'),
+                pw.Text('Hydration Score: ${summary.hydrationScore.toInt()}%'),
+                pw.SizedBox(height: 20),
+
+                pw.Text('Activity Breakdown', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                pw.Text('Activity: ${summary.activityBreakdown.toInt()}%'),
+                pw.Text('Sleep: ${summary.sleepBreakdown.toInt()}%'),
+                pw.Text('Nutrition: ${summary.nutritionBreakdown.toInt()}%'),
+                pw.Text('Hydration: ${summary.hydrationBreakdown.toInt()}%'),
+                pw.SizedBox(height: 20),
+
+                pw.Text('AI Health Insights', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                ...summary.aiInsights.map((insight) => pw.Text('• $insight')).toList(),
+              ],
+            );
+          },
+        ),
+      );
+
+      final bytes = await doc.save();
+      
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'MediMind_Health_Report_$range\_days.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportCsv(AnalyticsSummary summary, int range) async {
+    try {
+      List<List<dynamic>> rows = [];
+      
+      rows.add(["MediMind Health Report - Last $range Days"]);
+      rows.add(["Date Generated", DateTime.now().toIso8601String().split('T').first]);
+      rows.add([]);
+      
+      rows.add(["Metric", "Value"]);
+      rows.add(["Total Steps", summary.totalSteps]);
+      rows.add(["Average Sleep (hrs)", summary.avgSleep.toStringAsFixed(1)]);
+      rows.add(["Calories Burned (kcal)", summary.caloriesBurned]);
+      rows.add(["Hydration Score (%)", summary.hydrationScore.toInt()]);
+      rows.add([]);
+      
+      rows.add(["Breakdown", "Percentage"]);
+      rows.add(["Activity", summary.activityBreakdown.toInt()]);
+      rows.add(["Sleep", summary.sleepBreakdown.toInt()]);
+      rows.add(["Nutrition", summary.nutritionBreakdown.toInt()]);
+      rows.add(["Hydration", summary.hydrationBreakdown.toInt()]);
+      rows.add([]);
+      
+      rows.add(["AI Insights"]);
+      for (var insight in summary.aiInsights) {
+        rows.add([insight]);
+      }
+
+      String csvData = const ListToCsvConverter().convert(rows);
+      
+      await Share.share(
+        csvData, 
+        subject: 'MediMind Health Report ($range days)',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share CSV: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
