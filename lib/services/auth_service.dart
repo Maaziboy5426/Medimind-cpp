@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/constants/app_constants.dart';
@@ -91,6 +92,21 @@ class AuthService {
       return false;
     } catch (e) {
       debugPrint('Supabase signUp: $e');
+      return false;
+    }
+  }
+
+  Future<bool> signInWithGitHub() async {
+    try {
+      return await _client.auth.signInWithOAuth(
+        OAuthProvider.github,
+        redirectTo: kIsWeb ? null : 'io.supabase.medmind://login-callback/',
+      );
+    } on AuthException catch (e) {
+      debugPrint('Supabase GitHub login: ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('Supabase GitHub login error: $e');
       return false;
     }
   }

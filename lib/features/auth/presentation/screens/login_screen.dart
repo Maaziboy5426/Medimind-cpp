@@ -70,6 +70,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _signInWithGitHub() async {
+    setState(() => _isLoading = true);
+    try {
+      final success = await ref.read(authServiceProvider).signInWithGitHub();
+      if (!mounted) return;
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to sign in with GitHub'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      // On success, Supabase handles redirection/session setup.
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,6 +201,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     label: 'Log In',
                     onPressed: _submit,
                     isLoading: _isLoading,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: AppTheme.outline)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text("OR", style: TextStyle(color: AppTheme.onSurfaceVariant)),
+                      ),
+                      Expanded(child: Divider(color: AppTheme.outline)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _signInWithGitHub,
+                      icon: const Icon(Icons.code_rounded, color: AppTheme.onSurface), // GitHub icon approximation since no generic GitHub icon in standard Material setup
+                      label: const Text('Continue with GitHub', style: TextStyle(color: AppTheme.onSurface, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: AppTheme.outline),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 32),
                   Row(
