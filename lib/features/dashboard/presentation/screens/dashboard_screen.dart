@@ -173,8 +173,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   _MedicineInteractionCard(),
                   const SizedBox(height: 16),
                   _QuickActivitySummary(),
-                  const SizedBox(height: 24),
-                  _QuickActionsRow(),
                 ]),
               ),
             ),
@@ -844,69 +842,3 @@ class _HealthAlertsSection extends ConsumerWidget {
   }
 }
 
-class _QuickActionsRow extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _ActionButton(Icons.medication_rounded, 'Medicines', () {}),
-          _ActionButton(Icons.medical_services_rounded, 'Doctor', () {}),
-          _ActionButton(Icons.forum_rounded, 'Forum', () {}),
-          _ActionButton(Icons.chat_bubble_rounded, 'AI Chat', () {}),
-          _ActionButton(Icons.emergency_rounded, 'SOS', () {}, isEmergency: true),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends ConsumerWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isEmergency;
-
-  const _ActionButton(this.icon, this.label, this.onTap, {this.isEmergency = false});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isEmergency ? AppTheme.error : AppTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isEmergency ? AppTheme.error : AppTheme.outline,
-                  width: 1,
-                ),
-              ),
-              child: Icon(
-                icon,
-                color: isEmergency ? Colors.white : AppTheme.cyanAccent,
-                size: 24,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: isEmergency ? AppTheme.error : AppTheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

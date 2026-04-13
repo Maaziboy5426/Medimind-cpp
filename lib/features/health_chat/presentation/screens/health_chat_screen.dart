@@ -123,9 +123,6 @@ class _HealthChatScreenState extends ConsumerState<HealthChatScreen> {
 
                     const _SectionHeader(title: 'Personalized Insights'),
                     _PersonalizedInsightsSection(),
-
-                    const _SectionHeader(title: 'Quick Health Tools'),
-                    _buildQuickTools(),
                     
                     const SizedBox(height: 100), // Space for input area
                   ],
@@ -178,50 +175,6 @@ class _HealthChatScreenState extends ConsumerState<HealthChatScreen> {
     );
   }
 
-  Widget _buildQuickTools() {
-    final tools = [
-      {'icon': Icons.health_and_safety_rounded, 'label': 'Symptom Checker', 'route': '/physical-health'},
-      {'icon': Icons.psychology_alt_rounded, 'label': 'Mental Health', 'route': '/mental-health'},
-      {'icon': Icons.restaurant_rounded, 'label': 'Nutrition Advice', 'route': '/activity-tracker'},
-      {'icon': Icons.fitness_center_rounded, 'label': 'Fitness Guidance', 'route': '/activity-tracker'},
-      {'icon': Icons.medication_rounded, 'label': 'Medicine Questions', 'route': '/medicine-reminder'},
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: tools.map((t) {
-          return SizedBox(
-            width: (MediaQuery.of(context).size.width - 44) / 2,
-            child: Material(
-              color: AppTheme.navy600,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: () => context.go(t['route'] as String),
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Icon(t['icon'] as IconData, color: AppTheme.cyanAccent, size: 28),
-                      const SizedBox(height: 12),
-                      Text(
-                        t['label'] as String,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.onSurface),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
 
   Widget _buildInputArea() {
     return Container(

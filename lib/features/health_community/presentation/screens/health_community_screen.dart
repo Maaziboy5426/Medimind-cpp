@@ -125,10 +125,6 @@ class _HealthCommunityScreenState extends ConsumerState<HealthCommunityScreen>
 
                   // ---------- Expert Advice ----------
                   _buildExpertAdvice(),
-                  const SizedBox(height: 24),
-
-                  // ---------- Support Groups ----------
-                  _buildSupportGroups(),
                   const SizedBox(height: 32),
                 ]),
               ),
@@ -273,42 +269,6 @@ class _HealthCommunityScreenState extends ConsumerState<HealthCommunityScreen>
     );
   }
 
-  Widget _buildSupportGroups() {
-    final groups = ref.watch(supportGroupsProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Support Groups', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.onSurface)),
-        const SizedBox(height: 12),
-        ...groups.map((g) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: AppCard(
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppTheme.navy600, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.volunteer_activism_rounded, color: AppTheme.cyanAccent, size: 20),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.onSurface, fontSize: 14)),
-                      const SizedBox(height: 2),
-                      Text(g.description, style: const TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppTheme.onSurfaceVariant),
-              ],
-            ),
-          ),
-        )),
-      ],
-    );
-  }
 }
 
 // --------------------------------------------------------
