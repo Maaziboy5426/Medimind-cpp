@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/config/google_auth_config.dart';
 import '../core/constants/app_constants.dart';
 import 'local_storage_service.dart';
 import 'firebase_backend_service.dart';
@@ -52,54 +49,6 @@ class AuthService {
     return user?.profileCompleted ?? false;
   }
 
-  /// Uses Google Sign-In + Supabase [signInWithIdToken]. Requires
-  /// [googleWebClientId] (Google Cloud “Web client” ID, also configured in Supabase).
-  ///
-  /// Returns `null` if the user closed the Google picker. Returns `false` on failure.
-  Future<bool?> signInWithGoogle() async {
-    if (googleWebClientId.isEmpty) {
-      debugPrint(
-        'Google Sign-In: set GOOGLE_WEB_CLIENT_ID (Google Cloud Web client ID).',
-      );
-      return false;
-    }
-
-    try {
-      final googleSignIn = GoogleSignIn(
-        scopes: const ['email', 'profile'],
-        clientId: kIsWeb ? googleWebClientId : null,
-        serverClientId: kIsWeb ? null : googleWebClientId,
-      );
-
-      final account = await googleSignIn.signIn();
-      if (account == null) return null;
-
-      final auth = await account.authentication;
-      final idToken = auth.idToken;
-      if (idToken == null) {
-        debugPrint('Google Sign-In: missing idToken; check Web client ID / SHA-1 for Android.');
-        return false;
-      }
-
-      final response = await _client.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-        accessToken: auth.accessToken,
-      );
-
-      final session = response.session;
-      if (session == null) return false;
-      await _persistSession(session);
-      return true;
-    } on AuthException catch (e) {
-      debugPrint('Google Sign-In (Supabase): ${e.message}');
-      return false;
-    } catch (e) {
-      debugPrint('Google Sign-In: $e');
-      return false;
-    }
-  }
-
   Future<bool> login(String email, String password) async {
     try {
       final response = await _client.auth.signInWithPassword(
@@ -147,9 +96,6 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
     await _client.auth.signOut();
     await _clearLocalSession();
   }

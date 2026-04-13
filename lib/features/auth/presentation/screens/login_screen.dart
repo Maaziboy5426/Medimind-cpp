@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/config/google_auth_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../../../../services/storage_provider.dart';
-import '../widgets/google_sign_in_button.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +20,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
 
   @override
   void dispose() {
@@ -70,46 +67,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    if (googleWebClientId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Set GOOGLE_WEB_CLIENT_ID when running the app (Google Cloud Web client ID, same as in Supabase → Google provider).',
-          ),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isGoogleLoading = true);
-    try {
-      final result = await ref.read(authServiceProvider).signInWithGoogle();
-      if (!mounted) return;
-      if (result == true) {
-        ref.invalidate(authStateProvider);
-        context.go('/');
-      } else if (result == false) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Google sign-in failed. Check Supabase Google provider, client ID, and (Android) SHA-1 in Google Cloud.',
-            ),
-            backgroundColor: AppTheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -221,27 +178,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 32),
                   PrimaryButton(
                     label: 'Log In',
-                    onPressed: _isGoogleLoading ? null : _submit,
+                    onPressed: _submit,
                     isLoading: _isLoading,
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: AppTheme.onSurfaceVariant.withValues(alpha: 0.35))),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'OR',
-                          style: TextStyle(color: AppTheme.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: AppTheme.onSurfaceVariant.withValues(alpha: 0.35))),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  GoogleSignInButton(
-                    onPressed: (_isLoading || _isGoogleLoading) ? null : _signInWithGoogle,
-                    isLoading: _isGoogleLoading,
                   ),
                   const SizedBox(height: 32),
                   Row(
