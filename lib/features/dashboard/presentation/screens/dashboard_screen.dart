@@ -682,7 +682,9 @@ class _DailyStreakGoalsCard extends ConsumerWidget {
       workoutDays = historyAsync.value!.where((e) => e.activeMinutes > 30).length;
     }
 
-    final appSettings = ref.watch(appSettingsProvider);
+    final appUser = ref.watch(firebaseServiceProvider).getCurrentUser();
+    final dailyStepGoal = appUser?.stepGoal ?? ref.watch(appSettingsProvider).dailyStepGoal;
+    final dailyWaterGoalMl = appUser != null ? appUser.waterGoal * 250 : (ref.watch(appSettingsProvider).waterIntakeGoal * 1000).toInt();
 
     return AppCard(
       child: Column(
@@ -696,9 +698,9 @@ class _DailyStreakGoalsCard extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: 16),
-          _buildGoalProgress('Steps Goal', activity?.steps ?? 0, appSettings.dailyStepGoal),
+          _buildGoalProgress('Steps Goal', activity?.steps ?? 0, dailyStepGoal),
           const SizedBox(height: 12),
-          _buildGoalProgress('Hydration Goal', hydration, (appSettings.waterIntakeGoal * 1000).toInt()),
+          _buildGoalProgress('Hydration Goal', hydration, dailyWaterGoalMl),
           const SizedBox(height: 12),
           _buildGoalProgress('Workout Days', workoutDays, 5),
         ],

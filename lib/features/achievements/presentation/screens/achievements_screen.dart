@@ -39,8 +39,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
   @override
   Widget build(BuildContext context) {
     final achievements = ref.watch(achievementsStreamProvider).value ?? [];
-    final settings = ref.watch(appSettingsProvider);
-    final dailyStepGoal = settings.dailyStepGoal;
+    final user = ref.watch(firebaseServiceProvider).getCurrentUser();
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 800;
 
@@ -70,13 +69,13 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: _buildLeftColumn(achievements, dailyStepGoal)),
+                        Expanded(child: _buildLeftColumn(achievements, user)),
                         const SizedBox(width: 24),
-                        Expanded(child: _buildRightColumn(achievements, dailyStepGoal)),
+                        Expanded(child: _buildRightColumn(achievements, user)),
                       ],
                     )
                   else
-                    ..._buildMobileLayout(achievements, dailyStepGoal),
+                    ..._buildMobileLayout(achievements, user),
                   const SizedBox(height: 24),
                   _buildMotivationInsights(),
                   const SizedBox(height: 32),
@@ -105,36 +104,36 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
     );
   }
 
-  List<Widget> _buildMobileLayout(List<Achievement> achievements, int dailyStepGoal) {
+  List<Widget> _buildMobileLayout(List<Achievement> achievements, AppUser? user) {
     return [
       _buildDailyStreak(),
       const SizedBox(height: 24),
       _buildAchievementBadges(achievements),
       const SizedBox(height: 24),
-      _buildWellnessChallenges(dailyStepGoal),
+      _buildWellnessChallenges(user),
       const SizedBox(height: 24),
-      _buildMilestoneTracker(dailyStepGoal),
+      _buildMilestoneTracker(user),
     ];
   }
 
-  Widget _buildLeftColumn(List<Achievement> achievements, int dailyStepGoal) {
+  Widget _buildLeftColumn(List<Achievement> achievements, AppUser? user) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildDailyStreak(),
         const SizedBox(height: 24),
-        _buildWellnessChallenges(dailyStepGoal),
+        _buildWellnessChallenges(user),
       ],
     );
   }
 
-  Widget _buildRightColumn(List<Achievement> achievements, int dailyStepGoal) {
+  Widget _buildRightColumn(List<Achievement> achievements, AppUser? user) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildAchievementBadges(achievements),
         const SizedBox(height: 24),
-        _buildMilestoneTracker(dailyStepGoal),
+        _buildMilestoneTracker(user),
       ],
     );
   }
@@ -401,7 +400,11 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
     );
   }
 
-  Widget _buildWellnessChallenges(int dailyStepGoal) {
+  Widget _buildWellnessChallenges(AppUser? user) {
+    final dailyStepGoal = user?.stepGoal ?? 10000;
+    final waterGoal = user?.waterGoal ?? 8;
+    final sleepGoal = user?.sleepGoal ?? 8;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -413,7 +416,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
         ),
         const SizedBox(height: 12),
         _buildChallengeCard(
-          title: "Drink 8 glasses of water daily for 5 days",
+          title: "Drink $waterGoal glasses of water daily for 5 days",
           progress: 3 / 5,
           icon: Icons.water_drop,
         ),
@@ -425,7 +428,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
         ),
         const SizedBox(height: 12),
         _buildChallengeCard(
-          title: "Sleep 7+ hours for 5 nights",
+          title: "Sleep $sleepGoal+ hours for 5 nights",
           progress: 1 / 5,
           icon: Icons.bedtime,
         ),
@@ -525,7 +528,10 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
     );
   }
 
-  Widget _buildMilestoneTracker(int dailyStepGoal) {
+  Widget _buildMilestoneTracker(AppUser? user) {
+    final dailyStepGoal = user?.stepGoal ?? 10000;
+    final calorieGoal = user?.calorieGoal ?? 2000;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -541,7 +547,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> with Si
             children: [
               _buildMilestoneRow("Steps Goal", "4280 / $dailyStepGoal", 4280 / dailyStepGoal.toDouble(), AppTheme.cyanAccent),
               const SizedBox(height: 16),
-              _buildMilestoneRow("Workout Progress", "3 / 5 days", 3 / 5, Colors.purpleAccent),
+              _buildMilestoneRow("Calories Target", "1840 / $calorieGoal", 1840 / calorieGoal.toDouble(), Colors.purpleAccent),
               const SizedBox(height: 16),
               _buildMilestoneRow("Sleep Consistency", "6 / 7 days", 6 / 7, Colors.indigoAccent),
             ],
